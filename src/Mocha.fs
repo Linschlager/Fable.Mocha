@@ -41,7 +41,7 @@ module Env =
 
 [<RequireQualifiedAccess>]
 module Expect =
-    let inline equal (actual: 'a) (expected: 'a) msg  : unit =
+    let inline equal (actual: 'a) (expected: 'a) msg : unit =
         if actual = expected || not (Env.isBrowser()) then
             Assert.AreEqual(actual, expected, msg)
         else
@@ -54,20 +54,72 @@ module Expect =
                     sprintf "<span style='color:black'>Expected:</span> <br /><div style='margin-left:20px; color:crimson'>%A</div><br /><span style='color:black'>Actual:</span> </br ><div style='margin-left:20px;color:crimson'>%A</div><br /><span style='color:black'>Message:</span> </br ><div style='margin-left:20px; color:crimson'>%s</div>" expected actual msg
 
             raise (Exception(errorMsg))
-
-    let notEqual actual expected msg  : unit =
+    let notEqual actual expected msg : unit =
         Assert.NotEqual(actual, expected, msg)
-
+    let private isNull' cond =
+        match cond with
+        | null -> true
+        | _ -> false
+    let isNull cond = equal (isNull' cond) true
+    let isNotNull cond = notEqual (isNull' cond) true
+    let isNotNaN cond msg = if Double.IsNaN cond then failwith msg
+    let isNotInfinity cond msg = if Double.IsInfinity cond then failwith msg 
+    let isLessThan cond number msg =
+        if not (cond < number) then failwithf "%s. %s >= %s" msg (string cond) (string number)
+    let isLessThanOrEqual cond number msg =
+        if not (cond <= number) then failwithf "%s. %s > %s" msg (string cond) (string number)
+    let isGreaterThan cond number msg =
+        if not (cond > number) then failwithf "%s. %s <= %s" msg (string cond) (string number)
+    let isGreaterThanOrEqual cond number msg =
+        if not (cond >= number) then failwithf "%s. %s < %s" msg (string cond) (string number)
     let isTrue cond = equal cond true
     let isFalse cond = equal cond false
-    let isZero number = equal 0 number
-    let isEmpty (x: 'a seq) = equal true (Seq.isEmpty x)
-    let pass() = equal true true
+    let isZero cond = equal cond 0
+    let isEmpty (x: 'a seq) msg = if not (Seq.isEmpty x) then failwith msg
+    let exists (x: 'a seq) (a: 'a -> bool) msg = if not (Seq.exists a x) then failwith msg
+    let all (x: 'a seq) (a: 'a -> bool) msg = if not (Seq.forall a x) then failwith msg
+    let isNonEmpty (x: 'a seq) msg = if not (Seq.isEmpty x) then failwithf "%s. Expected seq to be empty" msg
+    /// Expects x to be not null nor empty
+    let isNotEmpty (x: 'a seq) msg =
+        isNotNull x msg
+        isNonEmpty x msg
+    /// Expects x to be a sequence of length `number`
+    let hasLength x number msg = equal (Seq.length x) number (sprintf "%s. Expected %A to have length %i" msg x number)
+    let pass () = equal true true
+    /// Expects x to be Result.Ok
     let isOk x message =
         match x with
-        | Ok _ -> pass() message
+        | Ok _ -> pass () message
         | Error x' -> failwithf "%s. Expected Ok, was Error(%A)." message x'
-
+    /// Expects x to be Result.Error
+    let isError x message =
+        match x with
+        | Error _ -> pass () message
+        | Ok x' -> failwithf "%s. Expected Error _, was Ok(%A)." message x'
+    let isSome x message =
+        match x with
+        | Some _ -> pass () message
+        | None -> failwithf "%s. Expected Some _, was None." message
+    let isNone x message =
+        match x with
+        | None -> pass () message
+        | Some x' -> failwithf "%s. Expected None, was Some(%A)." message x'
+    let private throws' f =
+        try f ()
+            None
+        with exn ->
+            Some exn
+    /// Expects the passed function to throw an exception
+    let throws f msg =
+        match throws' f with
+        | None -> failwithf "%s. Expected f to throw." msg
+        | Some _ -> ()
+    /// Expects the passed function to throw, then calls `cont` with the exception
+    let throwsC f cont =
+        match throws' f with
+        | None -> failwithf "Expected f to throw."
+        | Some exn -> cont exn
+        
 module private Html =
     type Node = {
         Tag: string;
